@@ -63,6 +63,37 @@
     table{min-width:640px}
     .btn{padding:10px 12px}
   }
+  /* Distributions (menu/program) */
+  .distros{max-width:1100px;margin:0 auto 10px;display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:0 14px}
+  .dist-card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:12px}
+  .dist-card h4{margin:4px 0 10px;font-size:14px;color:#334155}
+  .dist-list{display:grid;grid-template-columns:1fr auto;row-gap:6px;column-gap:8px;align-items:center}
+  .dist-name{color:#0f172a}
+  .dist-count{justify-self:end;background:#eef2ff;border:1px solid #dbeafe;border-radius:999px;padding:2px 8px;font-weight:700;color:#1d4ed8}
+  @media (max-width: 780px){.distros{grid-template-columns:1fr}}
+
+  /* Mobile bottom bar */
+  @media (max-width: 780px){
+    .mobile-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: space-around;
+      background: var(--gradient);
+      padding: 10px 0;
+      z-index: 100;
+      box-shadow: 0 -2px 6px rgba(0,0,0,0.1);
+    }
+    .mobile-bar button {
+      color: #fff;
+      background: transparent;
+      border: none;
+      font-weight: 700;
+      font-size: 15px;
+    }
+  }
 </style>
 </head>
 <body>
@@ -78,6 +109,18 @@
     <div class="stat-card"><div class="stat-value" id="presentCount">0</div><div class="stat-label">출석</div></div>
     <div class="stat-card"><div class="stat-value" id="absentCount">0</div><div class="stat-label">결석</div></div>
     <div class="stat-card"><div class="stat-value" id="rate">0%</div><div class="stat-label">출석률</div></div>
+  </section>
+
+  <!-- Per-class distributions -->
+  <section class="distros">
+    <div class="dist-card">
+      <h4>🍱 현재 반 중식 메뉴별 인원</h4>
+      <div class="dist-list" id="classMenuDist"></div>
+    </div>
+    <div class="dist-card">
+      <h4>🎯 현재 반 프로그램별 인원</h4>
+      <div class="dist-list" id="classProgDist"></div>
+    </div>
   </section>
 
   <div class="controls">
@@ -108,7 +151,25 @@
   <footer class="footer">
     <h3 style="margin:6px 0 10px">📊 전체 출석 현황</h3>
     <div class="summary" id="overall"></div>
+    <div style="margin-top:14px"></div>
+    <div class="summary" style="gap:14px; max-width:1100px; margin:12px auto 0; display:grid; grid-template-columns:1fr 1fr; align-items:flex-start">
+      <div class="dist-card" style="background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.25)">
+        <h4 style="color:#fff">🍱 전체 중식 메뉴별 인원</h4>
+        <div class="dist-list" id="overallMenuDist"></div>
+      </div>
+      <div class="dist-card" style="background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.25)">
+        <h4 style="color:#fff">🎯 전체 프로그램별 인원</h4>
+        <div class="dist-list" id="overallProgDist"></div>
+      </div>
+    </div>
   </footer>
+
+  <!-- 📱 모바일 하단 고정 버튼바 -->
+  <div class="mobile-bar">
+    <button id="mSelectAll">전체 선택</button>
+    <button id="mClearAll">전체 해제</button>
+    <button id="mSaveCSV">저장</button>
+  </div>
 
 <script>
 // ====== 데이터 초기화 ======
@@ -404,7 +465,7 @@ function renderTabs(){
     b.className = 'tab' + (c.id===activeId?' active':'');
     const count = state[c.id]?.length ?? c.size;
     b.textContent = `${c.name} (${count})`;
-    b.onclick = ()=>{ activeId=c.id; renderTabs(); renderTable(); updateStats(); updateOverall(); };
+    b.onclick = ()=>{ activeId=c.id; renderTabs(); renderTable(); updateStats(); updateOverall(); updateDistributions(); updateOverallDistributions(); };
     tabs.appendChild(b);
   });
 }
@@ -413,7 +474,11 @@ function makeCellEditable(td, key, row){
   td.contentEditable = 'true';
   td.spellcheck = false;
   td.textContent = row[key] ?? '';
-  td.addEventListener('input', ()=>{ row[key] = td.textContent.trim(); persistClass(activeId); });
+  td.addEventListener('input', ()=>{
+    row[key] = td.textContent.trim();
+    persistClass(activeId);
+    if (key === 'lunch' || key === 'program') { updateDistributions(); updateOverallDistributions(); }
+  });
 }
 
 function renderTable(){
@@ -425,7 +490,15 @@ function renderTable(){
     // 출석 체크
     const tdChk = document.createElement('td');
     const chk = document.createElement('input'); chk.type='checkbox'; chk.checked = !!r.present;
-    chk.addEventListener('change', ()=>{ r.present = chk.checked; tr.classList.toggle('present', r.present); updateStats(); updateOverall(); persistClass(activeId); });
+    chk.addEventListener('change', ()=>{
+      r.present = chk.checked;
+      tr.classList.toggle('present', r.present);
+      updateStats();
+      updateOverall();
+      updateDistributions();          // ✅ 반별 분포 갱신
+      updateOverallDistributions();   // ✅ 전체 분포 갱신
+      persistClass(activeId);
+    });
     tdChk.appendChild(chk);
 
     // 학번
@@ -480,13 +553,47 @@ function updateOverall(){
   `;
 }
 
+// ====== 분포(중식/프로그램) ======
+function tally(arr, key){
+  const m = new Map();
+  arr.forEach(r=>{
+    if (!r.present) return; // ✅ 출석한 학생만 카운트
+    const v = (r[key]||'').trim();
+    if(!v) return;
+    m.set(v, (m.get(v)||0)+1);
+  });
+  // 정렬: 내림차순 → 가나다
+  return [...m.entries()].sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0],'ko'));
+}
+
+function renderDist(elId, entries, light=false){
+  const el = document.getElementById(elId);
+  if(!el) return;
+  if(entries.length===0){ el.innerHTML = '<span class="dist-name" style="grid-column:1/-1;opacity:.7">선택된 항목이 없습니다</span>'; return; }
+  el.innerHTML = entries.map(([name,count])=>
+    `<span class='dist-name'>${name}</span><span class='dist-count'${light?" style='background:rgba(255,255,255,.25);border-color:rgba(255,255,255,.4);color:#fff'":""}>${count}</span>`
+  ).join('');
+}
+
+function updateDistributions(){
+  const rows = state[activeId];
+  renderDist('classMenuDist', tally(rows,'lunch'));
+  renderDist('classProgDist', tally(rows,'program'));
+}
+
+function updateOverallDistributions(){
+  const all = [].concat(...classes.map(c=>state[c.id]));
+  renderDist('overallMenuDist', tally(all,'lunch'), true);
+  renderDist('overallProgDist', tally(all,'program'), true);
+}
+
 // ====== 버튼 동작 ======
 const selectAllBtn = document.getElementById('selectAll');
 const clearAllBtn  = document.getElementById('clearAll');
 const saveBtn      = document.getElementById('saveCSV');
 
-selectAllBtn.addEventListener('click', ()=>{ state[activeId].forEach(r=>r.present=true); renderTable(); updateStats(); updateOverall(); persistClass(activeId); });
-clearAllBtn.addEventListener('click',  ()=>{ state[activeId].forEach(r=>r.present=false); renderTable(); updateStats(); updateOverall(); persistClass(activeId); });
+selectAllBtn.addEventListener('click', ()=>{ state[activeId].forEach(r=>r.present=true); renderTable(); updateStats(); updateDistributions(); updateOverall(); updateOverallDistributions(); persistClass(activeId); });
+clearAllBtn.addEventListener('click',  ()=>{ state[activeId].forEach(r=>r.present=false); renderTable(); updateStats(); updateDistributions(); updateOverall(); updateOverallDistributions(); persistClass(activeId); });
 
 saveBtn.addEventListener('click', ()=>{
   const rows = state[activeId];
@@ -508,6 +615,54 @@ renderTabs();
 renderTable();
 updateStats();
 updateOverall();
+updateDistributions();
+updateOverallDistributions();
+
+// ====== 모바일 하단 바: 기존 버튼과 동기화 ======
+(function syncMobileBar(){
+  const mSelectAll = document.getElementById('mSelectAll');
+  const mClearAll  = document.getElementById('mClearAll');
+  const mSaveCSV   = document.getElementById('mSaveCSV');
+  if (mSelectAll) mSelectAll.onclick = ()=>selectAllBtn.click();
+  if (mClearAll)  mClearAll.onclick  = ()=>clearAllBtn.click();
+  if (mSaveCSV)   mSaveCSV.onclick   = ()=>saveBtn.click();
+})();
+
+// ====== 간단 테스트(콘솔) ======
+(function runSmokeTests(){
+  // 1) tally 동작 확인: 같은 값 두 번 추가 시 카운트=2 (출석한 학생만)
+  const t1 = tally([
+    {present:true,  lunch:'A'},
+    {present:true,  lunch:'A'},
+    {present:true,  lunch:'B'}
+  ], 'lunch');
+  console.assert(t1.find(([k])=>k==='A')?.[1]===2, 'tally A should be 2 (present only)');
+  console.assert(t1.find(([k])=>k==='B')?.[1]===1, 'tally B should be 1 (present only)');
+
+  // 1-추가) 출석하지 않은 학생은 집계에서 제외되는지 확인
+  const t2 = tally([
+    {present:false, lunch:'A'},
+    {present:true,  lunch:'A'},
+    {present:false, lunch:'B'}
+  ], 'lunch');
+  console.assert(t2.find(([k])=>k==='A')?.[1]===1, 'only one present A should count');
+  console.assert(!t2.find(([k])=>k==='B'), 'absent B should not appear');
+
+  // 2) 기본 데이터 존재 확인: 2-8반 29명
+  console.assert(state['2-8'] && state['2-8'].length===29, 'class 2-8 should have 29 rows');
+
+  // 3) 분포 렌더 함수가 빈 배열에서 안내문 출력하는지 확인
+  const tmpId = 'tmpDistEl';
+  const tmp = document.createElement('div'); tmp.id = tmpId; document.body.appendChild(tmp);
+  renderDist(tmpId, []);
+  console.assert(document.getElementById(tmpId).innerHTML.includes('선택된 항목이 없습니다'), 'empty distribution message');
+  tmp.remove();
+
+  // 4) 버튼 동기화: 모바일 버튼이 존재할 때 이벤트가 붙었는지 확인
+  console.assert(typeof document.getElementById('mSelectAll').onclick === 'function', 'mobile select all bound');
+  console.assert(typeof document.getElementById('mClearAll').onclick  === 'function', 'mobile clear all bound');
+  console.assert(typeof document.getElementById('mSaveCSV').onclick   === 'function', 'mobile save bound');
+})();
 </script>
 </body>
 </html>
