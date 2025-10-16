@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>2025년 3차 체험학습 출석체크</title>
+<style>
+  :root {
+    --blue: #2563eb;
+    --blue-600:#1d4ed8;
+    --blue-light: #dbeafe;
+    --purple: #8b5cf6;
+    --gradient: linear-gradient(90deg, #3b82f6, #8b5cf6);
+    --gray: #f8fafc;
+    --border: #e2e8f0;
+    --text:#0f172a;
+  }
+  *{box-sizing:border-box}
+  body { margin: 0; font-family: 'Pretendard','Malgun Gothic',system-ui,sans-serif; background: #f3f6fb; color:var(--text); }
+  header { background: var(--gradient); color: #fff; text-align: center; padding: 20px 10px; border-bottom-left-radius: 20px; border-bottom-right-radius: 20px; position:sticky; top:0; z-index: 10; }
+  header h1 { font-size: 22px; margin: 0; }
+  header p { margin: 6px 0 0; font-size: 14px; opacity: .95; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 8px; overflow:auto; white-space:nowrap; background:#fff; padding:10px; box-shadow:0 2px 6px rgba(0,0,0,.05) }
+  .tab { padding: 8px 14px; border-radius: 999px; background: #f1f5f9; border: 1px solid var(--border); cursor: pointer; transition: .2s; font-weight:600; }
+  .tab.active { background: var(--blue); color:#fff; border-color: var(--blue-600); }
+
+  /* Stats */
+  .stats-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; text-align: center; margin: 18px auto; max-width: 1100px; padding: 0 14px; }
+  .stat-card { background:#fff; border-radius: 14px; border:1px solid var(--border); padding: 14px; }
+  .stat-value { font-size: 22px; color: var(--blue); font-weight: 800; }
+  .stat-label { font-size: 13px; color:#475569; }
+
+  /* Controls */
+  .controls { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin: 6px 0 16px; padding: 0 14px; }
+  .btn { border:none; border-radius:10px; padding:9px 14px; font-weight:700; cursor:pointer; }
+  .btn-blue { background: var(--blue); color:#fff; }
+  .btn-gray { background:#e2e8f0; color:#1e293b; }
+  .btn-green { background:#10b981; color:#fff; }
+
+  /* Table */
+  .table-wrap{ max-width:1100px; margin:0 auto; padding: 0 14px; }
+  .table-scroller{ overflow:auto; border-radius:14px; border:1px solid var(--border); background:#fff; }
+  table { width: 100%; border-collapse: collapse; min-width: 760px; }
+  th, td { padding: 10px 12px; text-align: center; border-bottom: 1px solid var(--border); }
+  thead { background: var(--gray); position:sticky; top:0; z-index:1; }
+  tbody tr.present { background: var(--blue-light); }
+  tbody tr:hover { background: #f9fafb; }
+  td[contenteditable]{ outline: none; }
+  .chip{display:inline-block; padding:4px 8px; border-radius:999px; background:#fee2e2; color:#991b1b; font-size:12px;}
+
+  /* Footer overall */
+  .footer { margin-top: 22px; background: var(--gradient); color:#fff; padding: 18px; text-align: center; border-top-left-radius: 20px; border-top-right-radius: 20px; }
+  .footer .summary { display:flex; justify-content:center; flex-wrap:wrap; gap:10px; }
+  .badge { background: rgba(255,255,255,.2); border-radius: 999px; padding: 8px 14px; font-weight:600; }
+
+  /* Responsive */
+  @media (max-width: 900px){ .stats-container{ grid-template-columns: repeat(2,1fr);} }
+  @media (max-width: 520px){
+    header h1{font-size:18px}
+    .stat-value{font-size:18px}
+    table{min-width:640px}
+    .btn{padding:10px 12px}
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>📋 2025년 3차 체험학습 출석체크</h1>
+    <p>2025년 10월 17일 (금) · 송도 체험학습</p>
+  </header>
+
+  <nav class="tabs" id="tabs"></nav>
+
+  <section class="stats-container">
+    <div class="stat-card"><div class="stat-value" id="totalCount">0</div><div class="stat-label">전체</div></div>
+    <div class="stat-card"><div class="stat-value" id="presentCount">0</div><div class="stat-label">출석</div></div>
+    <div class="stat-card"><div class="stat-value" id="absentCount">0</div><div class="stat-label">결석</div></div>
+    <div class="stat-card"><div class="stat-value" id="rate">0%</div><div class="stat-label">출석률</div></div>
+  </section>
+
+  <div class="controls">
+    <button class="btn btn-gray" id="selectAll">전체 선택</button>
+    <button class="btn btn-gray" id="clearAll">전체 해제</button>
+    <button class="btn btn-green" id="saveCSV">저장하기</button>
+  </div>
+
+  <div class="table-wrap">
+    <div class="table-scroller">
+      <table aria-label="출결 테이블">
+        <thead>
+          <tr>
+            <th style="width:72px">출석</th>
+            <th style="width:92px">학번</th>
+            <th style="min-width:120px">이름</th>
+            <th style="min-width:110px">지각</th>
+            <th style="min-width:110px">조퇴</th>
+            <th style="min-width:140px">중식</th>
+            <th style="min-width:140px">프로그램</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <h3 style="margin:6px 0 10px">📊 전체 출석 현황</h3>
+    <div class="summary" id="overall"></div>
+  </footer>
+
+<script>
+// ====== 데이터 초기화 ======
+const classes = [
+  { id: '2-1', name: '2-1반', size: 27 },
+  { id: '2-2', name: '2-2반', size: 29 },
+  { id: '2-3', name: '2-3반', size: 28 },
+  { id: '2-4', name: '2-4반', size: 28 },
+  { id: '2-5', name: '2-5반', size: 24 },
+  { id: '2-6', name: '2-6반', size: 27 },
+  { id: '2-7', name: '2-7반', size: 26 },
+  { id: '2-8', name: '2-8반', size: 29 },
+];
+
+// 기본 데이터(반별 이름/중식/프로그램)
+const defaultsData = {
+  '2-1': [
+    {no:20102,name:'박채영',lunch:'샤오바오',program:'동물친구'},
+    {no:20103,name:'서아연',lunch:'샤오바오',program:'클라이밍'},
+    {no:20104,name:'송지혜',lunch:'정씨함박',program:'VR 가상현실'},
+    {no:20105,name:'심예지',lunch:'호랭이곳간',program:'클라이밍'},
+    {no:20106,name:'안소진',lunch:'샤오바오',program:'동물친구'},
+    {no:20107,name:'안유림',lunch:'샤오바오',program:'동물친구'},
+    {no:20108,name:'우은정',lunch:'샤오바오',program:'보드 게임'},
+    {no:20109,name:'윤채원',lunch:'샤오바오',program:'보드 게임'},
+    {no:20110,name:'이서정',lunch:'정씨함박',program:'볼링'},
+    {no:20111,name:'이송현',lunch:'호랭이곳간',program:'동물친구'},
+    {no:20112,name:'이예원',lunch:'샤오바오',program:'VR 가상현실'},
+    {no:20113,name:'이유진',lunch:'정씨함박',program:'클라이밍'},
+    {no:20114,name:'이효린',lunch:'호랭이곳간',program:'VR 가상현실'},
+    {no:20115,name:'이효림',lunch:'정씨함박',program:'클라이밍'},
+    {no:20116,name:'장하영',lunch:'샤오바오',program:'VR 가상현실'},
+    {no:20117,name:'조예진',lunch:'샤오바오',program:'동물친구'},
+    {no:20118,name:'최윤영',lunch:'샤오바오',program:'클라이밍'},
+    {no:20119,name:'한가온',lunch:'정씨함박',program:'클라이밍'},
+    {no:20120,name:'김건희',lunch:'니뽕내뽕',program:'볼링'},
+    {no:20121,name:'김지섭',lunch:'포플러스한우',program:'볼링'},
+    {no:20122,name:'서지원',lunch:'시월십일',program:'볼링'},
+    {no:20123,name:'송민재',lunch:'호랭이곳간',program:'볼링'},
+    {no:20124,name:'엄태원',lunch:'샤오바오',program:'VR 가상현실'},
+    {no:20125,name:'유환준',lunch:'정씨함박',program:'VR 가상현실'},
+    {no:20126,name:'윤정민',lunch:'히노아지',program:'VR 가상현실'},
+    {no:20127,name:'정지원',lunch:'니뽕내뽕',program:'VR 가상현실'},
+    {no:20128,name:'천재민',lunch:'호랭이곳간',program:'클라이밍'},
+  ],
+  '2-2': [
+    {no:20201,name:'김예진',lunch:'샤오바오',program:'동물친구'},
+    {no:20202,name:'김정연',lunch:'샤오바오',program:'볼링'},
+    {no:20203,name:'김채원',lunch:'샤오바오',program:'볼링'},
+    {no:20204,name:'김희재',lunch:'샤오바오',program:'볼링'},
+    {no:20205,name:'박선',lunch:'히노아지',program:'볼링'},
+    {no:20206,name:'송윤채',lunch:'샤오바오',program:'동물친구'},
+    {no:20207,name:'신지혜',lunch:'샤오바오',program:'볼링'},
+    {no:20208,name:'양은서',lunch:'샤오바오',program:'동물친구'},
+    {no:20209,name:'오유란',lunch:'샤오바오',program:'동물친구'},
+    {no:20210,name:'이하은',lunch:'정씨함박',program:'VR 가상현실'},
+    {no:20211,name:'정가은',lunch:'정씨함박',program:'볼링'},
+    {no:20212,name:'정여은',lunch:'정씨함박',program:'볼링'},
+    {no:20213,name:'정채원',lunch:'정씨함박',program:'VR 가상현실'},
+    {no:20214,name:'천아현',lunch:'써브웨이',program:'클라이밍'},
+    {no:20215,name:'홍다현',lunch:'샤오바오',program:'볼링'},
+    {no:20216,name:'황하람',lunch:'샤오바오',program:'동물친구'},
+    {no:20217,name:'김두현',lunch:'포플러스한우',program:'볼링'},
+    {no:20218,name:'김민재',lunch:'써브웨이',program:'볼링'},
+    {no:20219,name:'박민규',lunch:'포플러스한우',program:'VR 가상현실'},
+    {no:20220,name:'박우주',lunch:'포플러스한우',program:'VR 가상현실'},
+    {no:20221,name:'서은찬',lunch:'포플러스한우',program:'볼링'},
+    {no:20222,name:'유시우',lunch:'니뽕내뽕',program:'보드 게임'},
+    {no:20223,name:'윤재혁',lunch:'포플러스한우',program:'볼링'},
+    {no:20224,name:'이시문',lunch:'시월십일',program:'동물친구'},
+    {no:20225,name:'전덕민',lunch:'포플러스한우',program:'보드 게임'},
+    {no:20226,name:'최한결',lunch:'포플러스한우',program:'볼링'},
+    {no:20227,name:'최현석',lunch:'포플러스한우',program:'VR 가상현실'},
+    {no:20228,name:'피관현',lunch:'히노아지',program:'볼링'},
+    {no:20229,name:'한호진',lunch:'호랭이곳간',program:'방 탈출'},
+  ],
+  '2-3': [
+    {no:20301,name:'강윤서',lunch:'샤오바오',program:'방 탈출'},
+    {no:20302,name:'김가영',lunch:'히노아지',program:'VR 가상현실'},
+    {no:20303,name:'김도연',lunch:'써브웨이',program:'VR 가상현실'},
+    {no:20304,name:'김예율',lunch:'니뽕내뽕',program:'방 탈출'},
+    {no:20305,name:'김지민',lunch:'써브웨이',program:'VR 가상현실'},
+    {no:20306,name:'박가은',lunch:'샤오바오',program:'VR 가상현실'},
+    {no:20307,name:'박지원',lunch:'샤오바오',program:'VR 가상현실'},
+    {no:20308,name:'박채은',lunch:'정씨함박',program:'볼링'},
+    {no:20309,name:'송서현',lunch:'시월십일',program:'동물친구'},
+    {no:20310,name:'송지민',lunch:'시월십일',program:'보드 게임'},
+    {no:20312,name:'이소빈',lunch:'시월십일',program:'방 탈출'},
+    {no:20313,name:'이수민',lunch:'써브웨이',program:'VR 가상현실'},
+    {no:20314,name:'이현진',lunch:'샤오바오',program:'VR 가상현실'},
+    {no:20315,name:'장서진',lunch:'써브웨이',program:'VR 가상현실'},
+    {no:20316,name:'장선영',lunch:'샤오바오',program:'동물친구'},
+    {no:20317,name:'장연욱',lunch:'써브웨이',program:'VR 가상현실'},
+    {no:20318,name:'허수민',lunch:'시월십일',program:'VR 가상현실'},
+    {no:20319,name:'박이현',lunch:'포플러스한우',program:'볼링'},
+    {no:20320,name:'신혜찬',lunch:'써브웨이',program:'볼링'},
+    {no:20321,name:'안동균',lunch:'시월십일',program:'방 탈출'},
+    {no:20322,name:'이경준',lunch:'니뽕내뽕',program:'VR 가상현실'},
+    {no:20323,name:'이서윤',lunch:'시월십일',program:'동물친구'},
+    {no:20324,name:'임민수',lunch:'샤오바오',program:'동물친구'},
+    {no:20325,name:'장산',lunch:'호랭이곳간',program:'방 탈출'},
+    {no:20326,name:'조안',lunch:'시월십일',program:'VR 가상현실'},
+    {no:20327,name:'최은호',lunch:'정씨함박',program:'클라이밍'},
+    {no:20328,name:'한승리',lunch:'써브웨이',program:'볼링'},
+    {no:20330,name:'한현태',lunch:'포플러스한우',program:'보드 게임'},
+  ],
+  '2-4': [
+    {no:20401,name:'김가람',lunch:'써브웨이',program:'VR 가상현실'},
+    {no:20402,name:'김태희',lunch:'포플러스한우',program:'보드 게임'},
+    {no:20403,name:'박서영',lunch:'샤오바오',program:'동물친구'},
+    {no:20404,name:'반승현',lunch:'니뽕내뽕',program:'방 탈출'},
+    {no:20405,name:'양태린',lunch:'포플러스한우',program:'보드 게임'},
+    {no:20406,name:'유현비',lunch:'포플러스한우',program:'보드 게임'},
+    {no:20407,name:'조수연',lunch:'히노아지',program:'VR 가상현실'},
+    {no:20408,name:'강현규',lunch:'포플러스한우',program:'VR 가상현실'},
+    {no:20409,name:'국신유',lunch:'시월십일',program:'VR 가상현실'},
+    {no:20410,name:'권순범',lunch:'호랭이곳간',program:'방 탈출'},
+    {no:20411,name:'김규민',lunch:'샤오바오',program:'보드 게임'},
+    {no:20412,name:'김민서',lunch:'니뽕내뽕',program:'보드 게임'},
+    {no:20413,name:'김승기',lunch:'니뽕내뽕',program:'보드 게임'},
+    {no:20414,name:'김재윤',lunch:'니뽕내뽕',program:'보드 게임'},
+    {no:20415,name:'류이현',lunch:'포플러스한우',program:'클라이밍'},
+    {no:20416,name:'박예준',lunch:'써브웨이',program:'볼링'},
+    {no:20417,name:'박태정',lunch:'니뽕내뽕',program:'볼링'},
+    {no:20418,name:'서연준',lunch:'히노아지',program:'VR 가상현실'},
+    {no:20419,name:'심정우',lunch:'니뽕내뽕',program:'방 탈출'},
+    {no:20420,name:'오승찬',lunch:'히노아지',program:'클라이밍'},
+    {no:20422,name:'장진우',lunch:'히노아지',program:'방 탈출'},
+    {no:20423,name:'조일우',lunch:'시월십일',program:'방 탈출'},
+    {no:20424,name:'최영재',lunch:'포플러스한우',program:'VR 가상현실'},
+    {no:20425,name:'최윤호',lunch:'포플러스한우',program:'클라이밍'},
+    {no:20426,name:'최진형',lunch:'샤오바오',program:'동물친구'},
+    {no:20427,name:'한근우',lunch:'히노아지',program:'볼링'},
+    {no:20428,name:'한명흠',lunch:'호랭이곳간',program:'VR 가상현실'},
+    {no:20429,name:'허진혁',lunch:'샤오바오',program:'보드 게임'},
+  ],
+  '2-5': [
+    {no:20502,name:'박가연',lunch:'시월십일',program:'클라이밍'},
+    {no:20503,name:'박채린',lunch:'써브웨이',program:'VR 가상현실'},
+    {no:20504,name:'반주현',lunch:'써브웨이',program:'VR 가상현실'},
+    {no:20505,name:'배유주',lunch:'정씨함박',program:'방 탈출'},
+    {no:20506,name:'변예서',lunch:'정씨함박',program:'동물친구'},
+    {no:20507,name:'손민아',lunch:'정씨함박',program:'방 탈출'},
+    {no:20508,name:'손은채',lunch:'정씨함박',program:'방 탈출'},
+    {no:20509,name:'이시현',lunch:'정씨함박',program:'방 탈출'},
+    {no:20510,name:'이인원',lunch:'니뽕내뽕',program:'동물친구'},
+    {no:20511,name:'천서희',lunch:'정씨함박',program:'동물친구'},
+    {no:20512,name:'추윤희',lunch:'정씨함박',program:'방 탈출'},
+    {no:20513,name:'황시원',lunch:'니뽕내뽕',program:'동물친구'},
+    {no:20515,name:'권동우',lunch:'니뽕내뽕',program:'볼링'},
+    {no:20517,name:'김동아',lunch:'호랭이곳간',program:'방 탈출'},
+    {no:20518,name:'김한결',lunch:'포플러스한우',program:'동물친구'},
+    {no:20519,name:'김혜성',lunch:'히노아지',program:'보드 게임'},
+    {no:20520,name:'박민규',lunch:'정씨함박',program:'클라이밍'},
+    {no:20521,name:'서장원',lunch:'써브웨이',program:'방 탈출'},
+    {no:20522,name:'신동휘',lunch:'써브웨이',program:'VR 가상현실'},
+    {no:20523,name:'이도형',lunch:'포플러스한우',program:'볼링'},
+    {no:20524,name:'임우현',lunch:'호랭이곳간',program:'방 탈출'},
+    {no:20525,name:'전태양',lunch:'호랭이곳간',program:'방 탈출'},
+    {no:20526,name:'정영훈',lunch:'히노아지',program:'클라이밍'},
+    {no:20527,name:'최유진',lunch:'써브웨이',program:'볼링'},
+  ],
+  '2-6': [
+    {no:20601,name:'김규림',lunch:'시월십일',program:'클라이밍'},
+    {no:20602,name:'김시연',lunch:'히노아지',program:'동물친구'},
+    {no:20603,name:'김주연',lunch:'써브웨이',program:'VR 가상현실'},
+    {no:20604,name:'윤하민',lunch:'샤오바오',program:'동물친구'},
+    {no:20605,name:'이은서',lunch:'포플러스한우',program:'VR 가상현실'},
+    {no:20606,name:'이채린',lunch:'포플러스한우',program:'VR 가상현실'},
+    {no:20607,name:'인시현',lunch:'히노아지',program:'동물친구'},
+    {no:20608,name:'정세연',lunch:'니뽕내뽕',program:'볼링'},
+    {no:20609,name:'천예원',lunch:'정씨함박',program:'볼링'},
+    {no:20610,name:'허지선',lunch:'정씨함박',program:'VR 가상현실'},
+    {no:20611,name:'강희성',lunch:'히노아지',program:'볼링'},
+    {no:20612,name:'고준서',lunch:'호랭이곳간',program:'방 탈출'},
+    {no:20613,name:'권윤우',lunch:'히노아지',program:'클라이밍'},
+    {no:20615,name:'김찬혁',lunch:'호랭이곳간',program:'보드 게임'},
+    {no:20616,name:'김한결',lunch:'포플러스한우',program:'VR 가상현실'},
+    {no:20617,name:'변병우',lunch:'정씨함박',program:'방 탈출'},
+    {no:20618,name:'서명원',lunch:'히노아지',program:'방 탈출'},
+    {no:20619,name:'서윤도',lunch:'시월십일',program:'클라이밍'},
+    {no:20620,name:'안찬희',lunch:'히노아지',program:'보드 게임'},
+    {no:20621,name:'용석빈',lunch:'샤오바오',program:'동물친구'},
+    {no:20622,name:'이도현',lunch:'정씨함박',program:'클라이밍'},
+    {no:20623,name:'이준연',lunch:'시월십일',program:'방 탈출'},
+    {no:20624,name:'이태형',lunch:'포플러스한우',program:'볼링'},
+    {no:20625,name:'이홍민',lunch:'시월십일',program:'VR 가상현실'},
+    {no:20626,name:'황시후',lunch:'시월십일',program:'방 탈출'},
+    {no:20627,name:'황현수',lunch:'시월십일',program:'클라이밍'},
+    {no:20628,name:'신희범',lunch:'히노아지',program:'보드 게임'},
+  ],
+  '2-7': [
+    {no:20701,name:'권세아',lunch:'시월십일',program:'보드 게임'},
+    {no:20702,name:'김지민',lunch:'시월십일',program:'보드 게임'},
+    {no:20703,name:'김혜린',lunch:'정씨함박',program:'보드 게임'},
+    {no:20704,name:'노혜지',lunch:'정씨함박',program:'동물친구'},
+    {no:20705,name:'윤채빈',lunch:'시월십일',program:'VR 가상현실'},
+    {no:20706,name:'이민채',lunch:'샤오바오',program:'동물친구'},
+    {no:20707,name:'이소율',lunch:'정씨함박',program:'동물친구'},
+    {no:20708,name:'이유경',lunch:'써브웨이',program:'보드 게임'},
+    {no:20709,name:'장선영',lunch:'써브웨이',program:'VR 가상현실'},
+    {no:20710,name:'장채은',lunch:'정씨함박',program:'보드 게임'},
+    {no:20711,name:'채다인',lunch:'써브웨이',program:'볼링'},
+    {no:20713,name:'홍지우',lunch:'정씨함박',program:'보드 게임'},
+    {no:20714,name:'김지성',lunch:'써브웨이',program:'동물친구'},
+    {no:20715,name:'남준식',lunch:'포플러스한우',program:'VR 가상현실'},
+    {no:20716,name:'노강훈',lunch:'써브웨이',program:'VR 가상현실'},
+    {no:20717,name:'박규정',lunch:'포플러스한우',program:'VR 가상현실'},
+    {no:20718,name:'염윤호',lunch:'호랭이곳간',program:'볼링'},
+    {no:20719,name:'윤영빈',lunch:'써브웨이',program:'볼링'},
+    {no:20720,name:'이금평',lunch:'히노아지',program:'볼링'},
+    {no:20721,name:'이서율',lunch:'포플러스한우',program:'VR 가상현실'},
+    {no:20722,name:'임예준',lunch:'포플러스한우',program:'VR 가상현실'},
+    {no:20723,name:'정석진',lunch:'포플러스한우',program:'VR 가상현실'},
+    {no:20724,name:'진현우',lunch:'히노아지',program:'볼링'},
+    {no:20725,name:'차우진',lunch:'포플러스한우',program:'볼링'},
+    {no:20726,name:'최성민',lunch:'써브웨이',program:'VR 가상현실'},
+    {no:20727,name:'하서진',lunch:'포플러스한우',program:'VR 가상현실'},
+  ],
+  '2-8': [
+    {no:20801,name:'권유정',lunch:'샤오바오',program:'방 탈출'},
+    {no:20802,name:'김민주',lunch:'샤오바오',program:'방 탈출'},
+    {no:20803,name:'김민지',lunch:'포플러스한우',program:'보드 게임'},
+    {no:20804,name:'김서영',lunch:'시월십일',program:'VR 가상현실'},
+    {no:20805,name:'김예나',lunch:'니뽕내뽕',program:'볼링'},
+    {no:20806,name:'김예은',lunch:'포플러스한우',program:'보드 게임'},
+    {no:20807,name:'김주아',lunch:'니뽕내뽕',program:'볼링'},
+    {no:20808,name:'김태희',lunch:'시월십일',program:'방 탈출'},
+    {no:20809,name:'서은경',lunch:'포플러스한우',program:'보드 게임'},
+    {no:20810,name:'송윤서',lunch:'시월십일',program:'동물친구'},
+    {no:20811,name:'양수정',lunch:'포플러스한우',program:'보드 게임'},
+    {no:20812,name:'윤다영',lunch:'니뽕내뽕',program:'VR 가상현실'},
+    {no:20813,name:'이다원',lunch:'시월십일',program:'VR 가상현실'},
+    {no:20814,name:'이보영',lunch:'시월십일',program:'동물친구'},
+    {no:20815,name:'이소율',lunch:'니뽕내뽕',program:'볼링'},
+    {no:20816,name:'이주영',lunch:'정씨함박',program:'볼링'},
+    {no:20817,name:'임지민',lunch:'샤오바오',program:'보드 게임'},
+    {no:20818,name:'최여진',lunch:'샤오바오',program:'보드 게임'},
+    {no:20819,name:'한수정',lunch:'샤오바오',program:'방 탈출'},
+    {no:20820,name:'강동현',lunch:'시월십일',program:'볼링'},
+    {no:20821,name:'곽윤근',lunch:'니뽕내뽕',program:'VR 가상현실'},
+    {no:20822,name:'김주엽',lunch:'포플러스한우',program:'볼링'},
+    {no:20823,name:'김중호',lunch:'포플러스한우',program:'볼링'},
+    {no:20824,name:'노성욱',lunch:'시월십일',program:'볼링'},
+    {no:20825,name:'노형오',lunch:'포플러스한우',program:'볼링'},
+    {no:20826,name:'박재준',lunch:'시월십일',program:'볼링'},
+    {no:20827,name:'성시우',lunch:'시월십일',program:'볼링'},
+    {no:20828,name:'전유준',lunch:'샤오바오',program:'방 탈출'},
+    {no:20829,name:'정은찬',lunch:'포플러스한우',program:'볼링'},
+  ],
+};
+
+const LSK = (cid)=>`attendance_v2_${cid}`; // localStorage key (v2: tardy/early added)
+let state = {};
+
+function loadClass(cid){
+  try{ return JSON.parse(localStorage.getItem(LSK(cid))||'null'); }catch(e){ return null; }
+}
+function persistClass(cid){
+  try{ localStorage.setItem(LSK(cid), JSON.stringify(state[cid])); }catch(e){}
+}
+
+// 초기 상태 구성: 저장분 > 기본 데이터 > placeholder
+classes.forEach(c=>{
+  const saved = loadClass(c.id);
+  if (saved && Array.isArray(saved)) {
+    state[c.id] = saved;
+  } else if (defaultsData[c.id]) {
+    state[c.id] = defaultsData[c.id].map(r=>({ ...r, present:false, tardy:false, early:false }));
+  } else {
+    state[c.id] = Array.from({length:c.size}, (_,i)=>({
+      no: 20000 + i + 1,
+      name: `학생${String(i+1).padStart(2,'0')}`,
+      lunch: '', program: '', present:false, tardy:false, early:false
+    }));
+  }
+});
+
+// ====== UI 요소 ======
+let activeId = classes[0].id;
+const tbody   = document.getElementById('tbody');
+const tabs    = document.getElementById('tabs');
+const totalEl = document.getElementById('totalCount');
+const presEl  = document.getElementById('presentCount');
+const absEl   = document.getElementById('absentCount');
+const rateEl  = document.getElementById('rate');
+
+// ====== 렌더러 ======
+function renderTabs(){
+  tabs.innerHTML='';
+  classes.forEach(c=>{
+    const b = document.createElement('button');
+    b.className = 'tab' + (c.id===activeId?' active':'');
+    const count = state[c.id]?.length ?? c.size;
+    b.textContent = `${c.name} (${count})`;
+    b.onclick = ()=>{ activeId=c.id; renderTabs(); renderTable(); updateStats(); updateOverall(); };
+    tabs.appendChild(b);
+  });
+}
+
+function makeCellEditable(td, key, row){
+  td.contentEditable = 'true';
+  td.spellcheck = false;
+  td.textContent = row[key] ?? '';
+  td.addEventListener('input', ()=>{ row[key] = td.textContent.trim(); persistClass(activeId); });
+}
+
+function renderTable(){
+  tbody.innerHTML='';
+  state[activeId].forEach((r,idx)=>{
+    const tr = document.createElement('tr');
+    tr.classList.toggle('present', !!r.present);
+
+    // 출석 체크
+    const tdChk = document.createElement('td');
+    const chk = document.createElement('input'); chk.type='checkbox'; chk.checked = !!r.present;
+    chk.addEventListener('change', ()=>{ r.present = chk.checked; tr.classList.toggle('present', r.present); updateStats(); updateOverall(); persistClass(activeId); });
+    tdChk.appendChild(chk);
+
+    // 학번
+    const tdNo = document.createElement('td'); tdNo.textContent = r.no; tdNo.title='학번';
+
+    // 이름
+    const tdName = document.createElement('td'); makeCellEditable(tdName, 'name', r);
+
+    // 지각 / 조퇴 (checkbox)
+    const tdTardy = document.createElement('td');
+    const chkT = document.createElement('input'); chkT.type='checkbox'; chkT.checked=!!r.tardy; chkT.title='지각';
+    chkT.addEventListener('change', ()=>{ r.tardy = chkT.checked; persistClass(activeId); });
+    tdTardy.appendChild(chkT);
+
+    const tdEarly = document.createElement('td');
+    const chkE = document.createElement('input'); chkE.type='checkbox'; chkE.checked=!!r.early; chkE.title='조퇴';
+    chkE.addEventListener('change', ()=>{ r.early = chkE.checked; persistClass(activeId); });
+    tdEarly.appendChild(chkE);
+
+    // 중식 / 프로그램 (텍스트 직접 수정)
+    const tdLunch = document.createElement('td'); makeCellEditable(tdLunch, 'lunch', r);
+    const tdProg  = document.createElement('td'); makeCellEditable(tdProg, 'program', r);
+
+    tr.append(tdChk, tdNo, tdName, tdTardy, tdEarly, tdLunch, tdProg);
+    tbody.appendChild(tr);
+  });
+}
+
+// ====== 통계 ======
+function updateStats(){
+  const rows = state[activeId];
+  const total = rows.length;
+  const present = rows.filter(x=>x.present).length;
+  const absent = total - present;
+  const pct = total? Math.round(present/total*100) : 0;
+  totalEl.textContent = total;
+  presEl.textContent  = present;
+  absEl.textContent   = absent;
+  rateEl.textContent  = pct+"%";
+}
+
+function updateOverall(){
+  let total=0, present=0;
+  classes.forEach(c=>{ const arr=state[c.id]; total += arr.length; present += arr.filter(r=>r.present).length; });
+  const absent = total - present;
+  const pct = total? Math.round(present/total*100) : 0;
+  document.getElementById('overall').innerHTML = `
+    <span class='badge'>전체 인원: ${total}</span>
+    <span class='badge'>출석: ${present}</span>
+    <span class='badge'>결석: ${absent}</span>
+    <span class='badge'>출석률: ${pct}%</span>
+  `;
+}
+
+// ====== 버튼 동작 ======
+const selectAllBtn = document.getElementById('selectAll');
+const clearAllBtn  = document.getElementById('clearAll');
+const saveBtn      = document.getElementById('saveCSV');
+
+selectAllBtn.addEventListener('click', ()=>{ state[activeId].forEach(r=>r.present=true); renderTable(); updateStats(); updateOverall(); persistClass(activeId); });
+clearAllBtn.addEventListener('click',  ()=>{ state[activeId].forEach(r=>r.present=false); renderTable(); updateStats(); updateOverall(); persistClass(activeId); });
+
+saveBtn.addEventListener('click', ()=>{
+  const rows = state[activeId];
+  const header = ['출석','학번','이름','지각','조퇴','중식','프로그램'];
+  const csv = [header, ...rows.map(r=>[
+    r.present?'O':'X', r.no, esc(r.name), r.tardy?'O':'', r.early?'O':'', esc(r.lunch), esc(r.program)
+  ])].map(a=>a.map(csvCell).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g,'');
+  const fn = `출석_${activeId}_${ts}.csv`;
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fn; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 100);
+});
+
+function csvCell(v){ const s=String(v??'').replaceAll('"','""'); return /[",\n]/.test(s)?`"${s}"`:s; }
+function esc(s){ return String(s||'').replace(/[\n\r,]/g,' ').trim(); }
+
+// ====== 초기 렌더 ======
+renderTabs();
+renderTable();
+updateStats();
+updateOverall();
+</script>
+</body>
+</html>
